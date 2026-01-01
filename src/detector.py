@@ -13,10 +13,18 @@ class VehicleDetector:
 
     def detect_vehicles(self, frame):
         """
-        Detect vehicles in a single frame.
+        Detect and track vehicles in a single frame.
         :param frame: The input frame (numpy array).
-        :return: Results object containing detections.
+        :return: Results object containing detections and tracking IDs.
         """
-        # Run inference on the frame, filtering for vehicle classes
-        results = self.model(frame, classes=self.vehicle_classes, verbose=False)
+        # Run tracking on the frame, filtering for vehicle classes
+        # persist=True ensures IDs are maintained across frames
+        # tracker='botsort.yaml' is the default and good for occlusion
+        results = self.model.track(
+            frame, 
+            classes=self.vehicle_classes, 
+            persist=True, 
+            verbose=False,
+            tracker="botsort.yaml"
+        )
         return results
