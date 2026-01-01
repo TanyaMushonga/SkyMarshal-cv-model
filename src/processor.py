@@ -1,21 +1,24 @@
+from src.speed_estimator import SpeedEstimator
 import cv2
 import os
 
 class VideoProcessor:
-    def __init__(self, detector, output_dir='output'):
+    def __init__(self, detector, output_dir='output', speed_estimator=None):
         """
         Initialize the VideoProcessor.
         :param detector: An instance of a vehicle detector.
         :param output_dir: Directory where processed videos will be saved.
+        :param speed_estimator: An optional SpeedEstimator instance.
         """
         self.detector = detector
         self.output_dir = output_dir
+        self.speed_estimator = speed_estimator if speed_estimator else SpeedEstimator()
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
     def process_video(self, input_path):
         """
-        Process a video file, detect vehicles, and save the result.
+        Process a video file, detect vehicles, track them, and estimate speed.
         :param input_path: Path to the input video file.
         """
         if not os.path.exists(input_path):
@@ -34,27 +37,51 @@ class VideoProcessor:
         
         # Prepare output video writer
         output_filename = os.path.basename(input_path)
-        output_path = os.path.join(self.output_dir, f"processed_{output_filename}")
+        output_path = os.path.join(self.output_dir, f"speed_{output_filename}")
         
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-        print(f"Processing video: {input_path}...")
+        print(f"Processing video with speed estimation: {input_path}...")
         
+        frame_idx = 0
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
 
-            # Detect vehicles
+            # Detect and track vehicles
             results = self.detector.detect_vehicles(frame)
             
-            # Draw detections on the frame
-            # results[0] contains the detection for the single frame input
-            annotated_frame = results[0].plot()
-
+            # Extract detection results
+            if results[0].boxes.id is not None:
+                boxes = results[0].boxes.xyxy.cpu().numpy()
+                track_ids = results[0].boxes.id.int().cpu().tolist()
+                
+                for box, track_id in zip(boxes, track_ids):
+                    x1, y1, x2, y2 = map(int, box)
+                    bottom_center = (int((x1 + x2) / 2), y2)
+                    
+                    # Estimate speed
+                    speed = self.speed_estimator.estimate_speed(
+                        track_id, bottom_center, frame_idx, fps
+                    )
+                    
+                    # Draw bounding box
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    
+                    # Draw ID and Speed label
+                    label = f"ID: {track_id} | {speed} km/h"
+                    (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                    
+                    # Ensure label stays within frame
+                    label_y = max(y1, h + 10)
+                    cv2.rectangle(frame, (x1, label_y - h - 10), (x1 + w, label_y), (0, 255, 0), -1)
+                    cv2.putText(frame, label, (x1, label_y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            
             # Write the frame to the output video
-            out.write(annotated_frame)
+            out.write(frame)
+            frame_idx += 1
 
         cap.release()
         out.release()
