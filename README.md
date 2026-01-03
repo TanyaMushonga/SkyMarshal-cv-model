@@ -1,69 +1,105 @@
 # SkyMarshal: Intelligent Aerial Traffic Observation System
 
-SkyMarshal is a computer-vision-based traffic monitoring system designed to detect vehicles, track them across frames, and provide real-time speed estimation and Automatic License Plate Recognition (ALPR).
+SkyMarshal is a computer-vision-based traffic monitoring system designed to detect vehicles, track their movement across frames, and provide real-time speed estimation and Automatic License Plate Recognition (ALPR). This system is optimized for aerial or high-angle surveillance footage.
 
-## 🚀 Features
+## Features
 
-- **Vehicle Detection & Tracking**: Uses YOLOv8 and BoT-SORT to identify and track cars, trucks, motorcycles, and buses with unique IDs.
-- **ALPR (Automatic License Plate Recognition)**: Integrated License Plate detection and OCR (EasyOCR) to identify vehicle plates.
-- **Speed Estimation**: Uses perspective transformation to map image coordinates to real-world distances for accurate speed calculation.
-- **Video Processing**: Batch process video files with detailed visual overlays.
+- **Vehicle Detection and Tracking**: Utilizes YOLOv8 and BoT-SORT for robust identification and tracking of cars, trucks, motorcycles, and buses.
+- **Automatic License Plate Recognition (ALPR)**: Integrated secondary detection model for license plate localization followed by Optical Character Recognition (OCR) using EasyOCR.
+- **Speed Estimation**: Employs perspective transformation to map image coordinates to real-world metric distances, facilitating accurate speed calculations.
+- **Stream Processing**: Optimized for both video file processing and potential expansion to live RTSP streams.
 
-## 🛠️ Installation
+## Project Lifecycle
 
-### 1. Clone the Repository
+### 1. Data Acquisition and Preparation
 
-```bash
-git clone https://github.com/TanyaMushonga/SkyMarshal.git
-cd SkyMarshal
+To achieve high accuracy in License Plate Recognition, it is recommended to use specialized datasets.
+
+- **Sourcing Data**: Datasets can be acquired from platforms such as [Roboflow Universe](https://universe.roboflow.com/search?q=license+plate). Search for datasets specifically labelled in YOLOv8 format.
+- **Annotation**: If using custom footage, tools like Roboflow can be used to manually annotate license plates. Annotate with a single class: `license-plate`.
+
+### 2. Model Training on Google Colab
+
+Training deep learning models locally can be resource-intensive. Using Google Colab is recommended for its free GPU access.
+
+#### Environment Setup
+
+```python
+!pip install ultralytics
 ```
 
-### 2. Set Up Virtual Environment
+#### Training Execution
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
+```python
+from ultralytics import YOLO
+
+# Initialize with a pre-trained nano model for efficiency
+model = YOLO('yolov8n.pt')
+
+# Execute training for 50 epochs
+model.train(data='data.yaml', epochs=50, imgsz=640)
 ```
 
-### 3. Install Dependencies
+#### Evaluation
 
-```bash
-pip install -r requirements.txt
-```
+After training, evaluate the performance by reviewing the generated metrics:
 
-## 🚦 Usage
+- **Accuracy Graphs**: Monitor `results.png` to ensure Loss is decreasing and Mean Average Precision (mAP) is increasing.
+- **Visual Validation**: Examine `val_batch0_labels.jpg` to verify detection quality on validation data.
 
-### 1. Prepare Models
+### 3. Deployment and Installation
 
-- The system uses `yolov8n.pt` for vehicle detection (downloaded automatically).
-- **ALPR**: Place a specialized YOLOv8 license plate model named `best.pt` in the project root.
+#### Prerequisites
 
-### 2. Run the System
+- Python 3.8 or higher
+- A virtual environment (venv) is strongly recommended
 
-Place your video file in the project directory (e.g., `traffic_sample.mp4`) and run:
+#### Installation Steps
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/TanyaMushonga/SkyMarshal.git
+   cd SkyMarshal
+   ```
+2. Create and activate a virtual environment:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+#### Model Implementation
+
+1. The system automatically utilizes `yolov8n.pt` for general vehicle detection.
+2. For ALPR, place your trained model weights (e.g., `best.pt` from your Colab training) into the project root directory.
+
+### 4. Running the System
+
+To process a video file, ensure it is located in the project directory and execute:
 
 ```bash
 python main.py
 ```
 
-Results will be saved in the `output/` directory.
+Output results, including processed videos with bounding boxes, speeds, and identified plates, will be saved in the `output/` directory.
 
-## 📂 Project Structure
+## Project Structure
 
-- `main.py`: Main entry point.
+- `main.py`: Primary execution script.
 - `src/`:
-  - `detector.py`: Vehicle detection logic.
-  - `processor.py`: Video stream handling and visualization.
-  - `speed_estimator.py`: Perspective-based speed math.
-  - `alpr.py`: License plate recognition module.
-- `output/`: Processed video results.
+  - `detector.py`: Core vehicle detection logic.
+  - `processor.py`: Stream management and visualization routines.
+  - `speed_estimator.py`: Geometric calculations for speed estimation.
+  - `alpr.py`: Specialized module for license plate recognition.
+- `output/`: Storage for processed output files.
 
----
+## License
 
-## ⚖️ License
+Distributed under the MIT License. See `LICENSE` for further details.
 
-Distributed under the MIT License. See `LICENSE` for more information.
+## Contributing
 
-## 🤝 Contributing
-
-Contributions are welcome! Please see `CONTRIBUTING.md` for guidelines.
+Contributions are welcome. Please refer to `CONTRIBUTING.md` for submission guidelines.
