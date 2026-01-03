@@ -1,18 +1,21 @@
 from src.speed_estimator import SpeedEstimator
+from src.alpr import LicensePlateReader
 import cv2
 import os
 
 class VideoProcessor:
-    def __init__(self, detector, output_dir='output', speed_estimator=None):
+    def __init__(self, detector, output_dir='output', speed_estimator=None, alpr_reader=None):
         """
         Initialize the VideoProcessor.
         :param detector: An instance of a vehicle detector.
         :param output_dir: Directory where processed videos will be saved.
         :param speed_estimator: An optional SpeedEstimator instance.
+        :param alpr_reader: An optional LicensePlateReader instance.
         """
         self.detector = detector
         self.output_dir = output_dir
         self.speed_estimator = speed_estimator if speed_estimator else SpeedEstimator()
+        self.alpr_reader = alpr_reader if alpr_reader else LicensePlateReader()
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
@@ -67,11 +70,18 @@ class VideoProcessor:
                         track_id, bottom_center, frame_idx, fps
                     )
                     
+                    # Identify License Plate
+                    # Crop vehicle for ALPR
+                    vehicle_crop = frame[y1:y2, x1:x2]
+                    plate_text = "Scanning..."
+                    if vehicle_crop.size > 0:
+                        plate_text = self.alpr_reader.detect_and_read(vehicle_crop, track_id)
+
                     # Draw bounding box
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     
-                    # Draw ID and Speed label
-                    label = f"ID: {track_id} | {speed} km/h"
+                    # Draw ID, Speed, and Plate label
+                    label = f"ID: {track_id} | {plate_text} | {speed} km/h"
                     (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
                     
                     # Ensure label stays within frame
