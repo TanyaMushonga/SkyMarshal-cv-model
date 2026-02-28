@@ -11,19 +11,18 @@ class SpeedEstimator:
         # Default source points for a generic traffic perspective
         # These are [top-left, top-right, bottom-right, bottom-left]
         if source_points is None:
+            # Tuned for more stability in the downward-facing highway angle
             self.source_points = np.float32([
-                [500, 400], [800, 400], 
-                [1100, 700], [200, 700]
+                [450, 450], [850, 450], 
+                [1280, 720], [0, 720]
             ])
         else:
             self.source_points = np.float32(source_points)
 
-        # Mapping to a bird's-eye view rectangle (meters representation)
-        # Width doesn't strictly matter for speed if we only move along length, 
-        # but let's define a 10m x real_length rectangle.
+        # ROI length (meters) - increased for better perspective stretch
         self.target_points = np.float32([
-            [0, 0], [10, 0], 
-            [10, real_length], [0, real_length]
+            [0, 0], [12, 0], 
+            [12, real_length + 20], [0, real_length + 20]
         ])
 
         # Calculate Transformation Matrix
@@ -41,39 +40,57 @@ class SpeedEstimator:
         return transformed[0][0]
 
     def estimate_speed(self, track_id, current_pos, current_frame, fps):
-        """
-        Calculate speed based on distance traveled in the warped perspective.
-        """
-        # Get ground coordinates
         ground_pos = self.get_real_world_pos(current_pos)
-
+        
         if track_id not in self.tracker_data:
             self.tracker_data[track_id] = {
-                'start_frame': current_frame,
-                'start_pos': ground_pos,
-                'current_speed': 0
+                'last_frame': current_frame,
+                'last_pos': ground_pos,
+                'speed_history': [],
+                'current_speed': 0,
+                'stable_frames': 0,
+                'hits': 0
             }
             return 0
-
+        
         data = self.tracker_data[track_id]
+        frames_elapsed = current_frame - data['last_frame']
         
-        # Calculate displacement in meters
-        dist = np.linalg.norm(ground_pos - data['start_pos'])
-        
-        # Calculate time elapsed
-        frames_elapsed = current_frame - data['start_frame']
+        # Only calculate if at least one frame has passed
         if frames_elapsed <= 0:
             return data['current_speed']
-
-        time_elapsed = frames_elapsed / fps # seconds
+            
+        # Calculate instantaneous distance and time
+        dist = np.linalg.norm(ground_pos - data['last_pos'])
+        time_elapsed = frames_elapsed / fps
         
-        # Speed = Distance / Time (m/s)
+        # Calculate speed in km/h
         speed_ms = dist / time_elapsed
+        inst_speed_kmh = speed_ms * 3.6
         
-        # Convert to km/h
-        speed_kmh = speed_ms * 3.6
+        # Sanity check: ignore unrealistic jumps (e.g. > 200 km/h)
+        if 5 < inst_speed_kmh < 220:
+            data['speed_history'].append(inst_speed_kmh)
+            if len(data['speed_history']) > 25: # Increased window from 10 to 25 for better smoothing
+                data['speed_history'].pop(0)
+            
+            # Use median filtering to remove outliers then average
+            sorted_history = sorted(data['speed_history'])
+            mid = len(sorted_history) // 2
+            avg_speed = sum(sorted_history[mid-5:mid+5]) / 10 if len(sorted_history) > 15 else sum(sorted_history) / len(sorted_history)
+            
+            # Clamp to a realistic highway maximum for display
+            data['current_speed'] = min(round(avg_speed, 1), 160.0)
+            data['stable_frames'] += frames_elapsed
+            data['hits'] += 1
         
-        # Update speed (could use moving average here, but keeping it simple)
-        self.tracker_data[track_id]['current_speed'] = round(speed_kmh, 2)
+        # Update last position and frame
+        data['last_pos'] = ground_pos
+        data['last_frame'] = current_frame
         
-        return self.tracker_data[track_id]['current_speed']
+        # Only show speed after a short grace period to allow for stabilization
+        # Only show speed after a short grace period and enough hits for stabilization
+        if data['stable_frames'] < 15 or data['hits'] < 8:
+            return 0
+            
+        return data['current_speed']
